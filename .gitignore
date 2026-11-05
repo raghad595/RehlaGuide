@@ -1,0 +1,58 @@
+# ---------------------------------------------------------------- Python env
+.venv/
+venv/
+env/
+ENV/
+
+# ---------------------------------------------------------------- Python caches / build
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ---------------------------------------------------------------- Testing / tooling caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ---------------------------------------------------------------- Secrets (keep .env.example!)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.streamlit/secrets.toml
+
+# ---------------------------------------------------------------- Generated data (rebuild with data/scripts/*)
+# SQLite DB  -> python data/scripts/ingest_sql.py
+data/rehlaguide.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+# Qdrant local vector store + chunk export -> python data/scripts/ingest_vectors.py
+data/qdrant_db/
+data/processed_chunks.json
+
+# ---------------------------------------------------------------- Model caches (if redirected into the repo)
+.cache/
+models/
+*.safetensors
+*.bin
+*.onnx
+
+# ---------------------------------------------------------------- Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------- Logs
+*.log
+logs/

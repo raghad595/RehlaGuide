@@ -1,0 +1,30 @@
+attraction_id,name_en,name_ar,city,category,visit_duration_minutes,latitude,longitude,official_url
+GIZ001,Great Pyramids of Giza,أهرامات الجيزة,Giza,Archaeological Site,210,29.97,31.13,https://egymonuments.gov.eg/en/monuments/the-great-pyramid/
+GIZ002,Great Sphinx,أبو الهول,Giza,Archaeological Site,60,29.97,31.13,https://egymonuments.gov.eg/en/monuments/the-great-sphinx/
+GIZ003,Grand Egyptian Museum (GEM),المتحف المصري الكبير,Giza,Museum,240,29.99,31.12,https://tickets.gem.eg/
+CAI001,Egyptian Museum in Tahrir,المتحف المصري بالتحرير,Cairo,Museum,180,30.04,31.23,https://egymonuments.gov.eg/en/museums/egyptian-museum
+CAI002,National Museum of Egyptian Civilization,المتحف القومي للحضارة المصرية,Cairo,Museum,150,30.01,31.25,https://nmec.gov.eg/
+GIZ004,Saqqara Necropolis,منطقة سقارة,Giza / Memphis,Archaeological Site,180,29.87,31.21,https://egymonuments.gov.eg/en/monuments/new-kingdom-cemetery
+GIZ005,Dahshur,دهشور,Giza / Memphis,Archaeological Site,120,29.80,31.20,https://egymonuments.com/details/Dahshur
+CAI003,Mohammed Ali Mosque - Citadel of Saladin,قلعة صلاح الدين - مسجد محمد علي,Cairo,Historical Fort,150,30.02,31.26,https://egymonuments.gov.eg/en/monuments/muhammad-ali-mosque/
+ALX001,Bibliotheca Alexandrina,مكتبة الإسكندرية,Alexandria,Library / Museum,150,31.21,29.91,https://www.bibalex.org/en/default
+ALX002,Qaitbay Citadel,قلعة قايتباي,Alexandria,Historical Fort,120,31.21,29.88,https://egymonuments.gov.eg/en/monuments/qaitbay-fort/
+ALX003,Catacombs of Kom El Shoqafa,مقابر كوم الشقافة,Alexandria,Archaeological Site,90,31.17,29.89,https://egymonuments.com/locations/details/KomelShoqafaCatacombs
+ALX004,Pompey's Pillar,عمود السواري,Alexandria,Archaeological Site,60,31.18,29.89,https://egymonuments.com/details/SerapeumofAlexandria
+ALX005,Stanley Bridge,كوبري ستانلي,Alexandria,Landmark,60,31.23,29.94,https://www.tripadvisor.com/Attraction_Review-g295398-d1020148-Reviews-Stanley_Bridge-Alexandria_Alexandria_Governorate.html
+SSN001,Saint Catherine Area,سانت كاترين,South Sinai,UNESCO / Religious,480,28.55,33.97,https://egymonuments.gov.eg/en/archaeological-sites/saint-catherine-s-monastery/
+SSN002,Ras Mohammed National Park,محمية رأس محمد,South Sinai,National Park,480,27.72,34.24,https://national-parks.org/egypt/ras-muhammad/
+FYM001,Wadi El-Hitan (Whale Valley),وادي الحيتان,Fayoum,UNESCO / National Park,480,29.26,30.04,https://whc.unesco.org/en/list/1186
+FYM002,Fayoum Attractions (Wadi El Rayan),معالم الفيوم,Fayoum,Nature / Archaeology,480,29.30,30.84,https://www.tripadvisor.com/Attractions-g424907-Activities-Al_Fayyum_Al_Fayyum_Governorate.html
+MTR001,Siwa Oasis,واحة سيوة,Matrouh,Oasis,1440,29.20,25.51,https://siwaoasisadventures.com/
+RED001,El-Gouna City,مدينة الجونة,Red Sea,Resort City,1440,27.39,33.67,https://www.elgouna.com/
+LXR001,Karnak Temple,معبد الكرنك,Luxor,Archaeological Site,180,25.71,32.65,https://egymonuments.gov.eg/en/archaeological-sites/karnak/
+LXR002,Luxor Temple,معبد الأقصر,Luxor,Archaeological Site,120,25.69,32.63,https://egymonuments.gov.eg/en/monuments/luxor-temple
+LXR003,Temple of Hatshepsut,معبد حتشبسوت,Luxor,Archaeological Site,120,25.73,32.60,https://egymonuments.gov.eg/en/monuments/hatshepsut-temple/
+LXR004,Valley of the Kings,وادي الملوك,Luxor,Archaeological Site,210,25.74,32.60,https://egymonuments.gov.eg/archaeological-sites/valley-of-the-kings
+LXR005,Medinet Habu,مدينة هابو,Luxor,Archaeological Site,120,25.71,32.60,https://egymonuments.gov.eg/en/monuments/the-temple-of-medinet-habu
+ASW001,Philae Temple,معبد فيلة,Aswan,Archaeological Site,150,24.02,32.88,https://egymonuments.gov.eg/archaeological-sites/philae/
+ASW002,Abu Simbel Temples,معابد أبو سمبل,Aswan,Archaeological Site,120,22.33,31.62,https://egymonuments.gov.eg/en/archaeological-sites/abu-simbel
+ASW003,Kom Ombo Temple,معبد كوم أمبو,Aswan,Archaeological Site,90,24.45,32.92,https://egymonuments.gov.eg/monuments/kom-ombo-temple/
+ASW004,Nubian Museum,متحف النوبة,Aswan,Museum,120,24.07,32.88,https://egymonuments.gov.eg/en/museums/nubia-museum/
+ASW005,Unfinished Obelisk,المسلة الناقصة,Aswan,Archaeological Site,60,24.07,32.89,https://egymonuments.gov.eg/monuments/the-unfinished-obelisk/
