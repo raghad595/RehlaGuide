@@ -1,19 +1,16 @@
+import time
 from typing import List, Optional
 
 from cachetools import TTLCache
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import selectinload
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlmodel import Session, col, select
 
 from app.db.database import get_session
 from app.models import Attraction
-from app.schemas import (
-    AttractionDetailResponse,
-    AttractionStatusUpdate,
-    AttractionSummary,
-    OpeningHourSchema,
-    TicketPriceSchema,
-)
+from app.schemas import AttractionDetailResponse, AttractionStatusUpdate, AttractionSummary
+from app.services import analytics_service
+from app.services.attraction_service import load_details
+from app.services.rag_service import invalidate_rag_cache
 
 router = APIRouter(prefix="/api/v1/attractions", tags=["attractions"])
 
@@ -25,34 +22,11 @@ def clear_cache() -> None:
     _detail_cache.clear()
 
 
-def _to_detail(a: Attraction) -> AttractionDetailResponse:
-    return AttractionDetailResponse(
-        attraction_id=a.attraction_id,
-        name_en=a.name_en,
-        name_ar=a.name_ar,
-        city=a.city,
-        category=a.category,
-        visit_duration_minutes=a.visit_duration_minutes,
-        latitude=a.latitude,
-        longitude=a.longitude,
-        official_url=a.official_url,
-        is_open=a.is_open,
-        closure_reason=a.closure_reason,
-        opening_hours=[OpeningHourSchema.model_validate(h, from_attributes=True) for h in a.opening_hours],
-        ticket_prices=[TicketPriceSchema.model_validate(t, from_attributes=True) for t in a.ticket_prices],
-    )
-
-
-def _load(session: Session, attraction_id: str) -> Attraction:
-    stmt = (
-        select(Attraction)
-        .where(Attraction.attraction_id == attraction_id)
-        .options(selectinload(Attraction.opening_hours), selectinload(Attraction.ticket_prices))
-    )
-    attraction = session.exec(stmt).first()
-    if attraction is None:
+def _load(session: Session, attraction_id: str) -> AttractionDetailResponse:
+    details = load_details(session, [attraction_id])
+    if not details:
         raise HTTPException(status_code=404, detail=f"Attraction '{attraction_id}' not found")
-    return attraction
+    return details[0]
 
 
 @router.get("", response_model=List[AttractionSummary])
@@ -76,13 +50,28 @@ def list_attractions(
 
 
 @router.get("/{attraction_id}", response_model=AttractionDetailResponse)
-def get_attraction(attraction_id: str, session: Session = Depends(get_session)) -> AttractionDetailResponse:
+def get_attraction(
+    attraction_id: str,
+    session: Session = Depends(get_session),
+    x_session_id: Optional[str] = Header(None, description="Optional client session id for analytics"),
+    x_language: Optional[str] = Header(None, description="Optional UI language (en/ar) for analytics"),
+) -> AttractionDetailResponse:
+    started = time.perf_counter()
     key = attraction_id.upper()
-    cached = _detail_cache.get(key)
-    if cached is not None:
-        return cached
-    detail = _to_detail(_load(session, key))
-    _detail_cache[key] = detail
+    detail = _detail_cache.get(key)
+    cache_hit = detail is not None
+    if detail is None:
+        detail = _load(session, key)
+        _detail_cache[key] = detail
+    analytics_service.log_event(
+        session_id=x_session_id or "anonymous",
+        event_type="attraction_lookup",
+        language=x_language if x_language in ("en", "ar") else "en",
+        city=detail.city,
+        attraction_ids=[detail.attraction_id],
+        cache_hit=cache_hit,
+        latency_ms=int((time.perf_counter() - started) * 1000),
+    )
     return detail
 
 
@@ -93,12 +82,15 @@ def update_status(
     session: Session = Depends(get_session),
 ) -> AttractionDetailResponse:
     key = attraction_id.upper()
-    attraction = _load(session, key)
+    attraction = session.get(Attraction, key)
+    if attraction is None:
+        raise HTTPException(status_code=404, detail=f"Attraction '{attraction_id}' not found")
     attraction.is_open = payload.is_open
     attraction.closure_reason = None if payload.is_open else payload.closure_reason
     session.add(attraction)
     session.commit()
     _detail_cache.pop(key, None)
-    detail = _to_detail(_load(session, key))
+    invalidate_rag_cache(key)  # chat answers that cited this attraction are now stale
+    detail = _load(session, key)
     _detail_cache[key] = detail
     return detail

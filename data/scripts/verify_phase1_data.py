@@ -14,13 +14,15 @@ from typing import Callable, Dict, List
 import pandas as pd
 from sqlmodel import Session, select
 
+from app.core.config import get_settings
 from app.db.database import engine
 from app.models import Attraction, OpeningHour, TicketPrice
+from app.services.vector_store import close_qdrant_client, get_qdrant_client
 
 DATA_DIR = Path(__file__).resolve().parents[1]
 CHUNKS_JSON = DATA_DIR / "processed_chunks.json"
-QDRANT_PATH = DATA_DIR / "qdrant_db"
-COLLECTION = "rehlaguide_attractions"
+QDRANT_PATH = get_settings().qdrant_path
+COLLECTION = get_settings().verified_collection
 
 LAT_RANGE = (22.0, 31.8)
 LON_RANGE = (24.5, 37.0)
@@ -133,28 +135,20 @@ def check_chunks_json() -> List[str]:
     return _parity_errors(rows, "processed_chunks.json", {a.attraction_id for a in attractions})
 
 
-def check_qdrant(client=None) -> List[str]:
-    from qdrant_client import QdrantClient
-
-    own = client is None
-    if own:
-        if not QDRANT_PATH.exists():
-            return [f"{QDRANT_PATH} missing - run ingest_vectors.py"]
-        client = QdrantClient(path=str(QDRANT_PATH))
-    try:
-        if not client.collection_exists(COLLECTION):
-            return [f"Qdrant collection '{COLLECTION}' missing"]
-        rows, offset = [], None
-        while True:
-            points, offset = client.scroll(COLLECTION, limit=256, offset=offset, with_payload=True)
-            rows += [p.payload for p in points]
-            if offset is None:
-                break
-        attractions, _, _ = _load_db()
-        return _parity_errors(rows, "qdrant", {a.attraction_id for a in attractions})
-    finally:
-        if own:
-            client.close()
+def check_qdrant() -> List[str]:
+    if not QDRANT_PATH.exists():
+        return [f"{QDRANT_PATH} missing - run ingest_vectors.py"]
+    client = get_qdrant_client()  # shared per-process client (local mode allows only one)
+    if not client.collection_exists(COLLECTION):
+        return [f"Qdrant collection '{COLLECTION}' missing"]
+    rows, offset = [], None
+    while True:
+        points, offset = client.scroll(COLLECTION, limit=256, offset=offset, with_payload=True)
+        rows += [p.payload for p in points]
+        if offset is None:
+            break
+    attractions, _, _ = _load_db()
+    return _parity_errors(rows, "qdrant", {a.attraction_id for a in attractions})
 
 
 CHECKS: Dict[str, Callable[[], List[str]]] = {
@@ -174,6 +168,7 @@ def main() -> int:
         for e in errors:
             print(f"    - {e}")
         failed += bool(errors)
+    close_qdrant_client()
     return 1 if failed else 0
 
 

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 
@@ -74,3 +74,23 @@ class TicketPrice(SQLModel, table=True):
     last_verified_at: Optional[date] = None                   # From 'Last_Verified_At'
 
     attraction: Optional[Attraction] = Relationship(back_populates="ticket_prices")
+
+def _utcnow() -> datetime:
+    # Timezone-aware UTC. (datetime.utcnow() is deprecated, and this SQLModel version
+    # rejects naive datetimes on insert.)
+    return datetime.now(timezone.utc)
+
+
+class AnalyticsEvent(SQLModel, table=True):
+    __tablename__ = "analytics_events"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    timestamp: datetime = Field(default_factory=_utcnow, index=True)
+    session_id: str = Field(index=True)
+    event_type: str = Field(index=True)      # chat_qa | attraction_lookup | itinerary_plan | itinerary_replan
+    language: str = Field(index=True)        # en | ar
+    data_tier_used: str = Field(default="verified")  # verified | unverified_fallback | none
+    city: Optional[str] = Field(default=None, index=True)
+    attraction_ids_json: List[str] = Field(default=[], sa_column=Column(JSON))
+    cache_hit: bool = Field(default=False)
+    latency_ms: int = Field(default=0)
