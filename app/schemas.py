@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional, Literal
+from typing import Dict, List, Optional, Literal
 from pydantic import BaseModel, Field
 
 # --- 1. ATTRACTION DATA CONTRACTS (/api/v1/attractions) ---
@@ -106,10 +106,24 @@ class ItineraryResponse(BaseModel):
 
 # --- 3. CONVERSATIONAL & REPLANNING CONTRACTS (/api/v1/chat) ---
 
+DataTier = Literal["verified", "unverified_fallback", "none"]
+
+
 class ChatRequest(BaseModel):
-    session_id: str
-    message: str
+    session_id: str = Field(min_length=1, max_length=128)
+    message: str = Field(min_length=1, max_length=2000)
     preferred_language: Optional[Literal["en", "ar"]] = None
+
+class UnverifiedSource(BaseModel):
+    """A Tier 2 (Wikidata) site used in an answer. Deliberately has NO hours/price fields."""
+    wikidata_qid: Optional[str] = None
+    name_en: Optional[str] = None
+    name_ar: Optional[str] = None
+    city: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    source_url: Optional[str] = None
+    is_verified: Literal[False] = False
 
 class ChatResponse(BaseModel):
     session_id: str
@@ -118,5 +132,31 @@ class ChatResponse(BaseModel):
     assistant_message: str
     itinerary: Optional[ItineraryResponse] = None
     referenced_attractions: List[AttractionDetailResponse] = []
+    data_tier_used: DataTier = "verified"
+    supplementary_sources: List[UnverifiedSource] = []
+    llm_provider: str = "deterministic"
     cache_hit: bool = False
     latency_ms: int
+
+
+# --- 4. ANALYTICS CONTRACTS (/api/v1/analytics) ---
+
+class CityCount(BaseModel):
+    city: str
+    count: int
+
+class AttractionCount(BaseModel):
+    attraction_id: str
+    name_en: Optional[str] = None
+    name_ar: Optional[str] = None
+    count: int
+
+class AnalyticsSummaryResponse(BaseModel):
+    total_queries: int
+    cache_hit_rate_pct: float
+    average_latency_ms: float
+    language_distribution: Dict[str, int]
+    tier_distribution: Dict[str, int]
+    event_type_distribution: Dict[str, int]
+    top_cities: List[CityCount]
+    top_attractions: List[AttractionCount]
