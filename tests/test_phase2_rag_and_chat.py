@@ -4,6 +4,7 @@ Runs against temp copies of the DB and Qdrant (see conftest.py) with the determi
 LLM fallback, so results are reproducible and nothing real is modified.
 """
 import re
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -83,11 +84,32 @@ def fresh_rag_cache():
     rag_service.invalidate_rag_cache()
 
 
+MOCK_TIER2_COLLECTION = "pytest_tier2_mock"
+REAL_QDRANT = (Path(__file__).resolve().parents[1] / "data" / "qdrant_db").resolve()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def mock_tier2_collection():
+    """Point Tier 2 at a scratch collection for this module, so the mock-data tests can create
+    and drop it freely without ever touching the real Wikidata collection."""
+    s = get_settings()
+    real_name = s.unverified_collection
+    s.unverified_collection = MOCK_TIER2_COLLECTION
+    rag_service.invalidate_rag_cache()
+    yield
+    _drop_tier2()
+    s.unverified_collection = real_name
+    rag_service.invalidate_rag_cache()
+
+
 def _drop_tier2():
+    s = get_settings()
+    # Hard guards: only ever drop the scratch collection, and never in the real data folder.
+    assert s.unverified_collection == MOCK_TIER2_COLLECTION, "refusing to drop a non-test collection"
+    assert Path(s.qdrant_path).resolve() != REAL_QDRANT, "refusing to modify the real data/qdrant_db"
     c = vector_store.get_qdrant_client()
-    name = get_settings().unverified_collection
-    if c.collection_exists(name):
-        c.delete_collection(name)
+    if c.collection_exists(MOCK_TIER2_COLLECTION):
+        c.delete_collection(MOCK_TIER2_COLLECTION)
 
 
 @pytest.fixture

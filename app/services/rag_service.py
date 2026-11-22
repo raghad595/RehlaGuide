@@ -59,8 +59,21 @@ MAX_UNVERIFIED_SITES = 2
 # prices, phone numbers, ...) is dropped before it can reach a prompt or an answer.
 UNVERIFIED_ALLOWED_FIELDS = (
     "chunk_id", "wikidata_qid", "name_en", "name_ar", "language", "city", "category",
-    "latitude", "longitude", "source_url", "text",
+    "latitude", "longitude", "source_url", "image_url", "text",
+    # structured, language-specific facts written by data/scripts/ingest_wikidata.py
+    "description", "summary", "instance_of", "located_in", "architectural_styles", "heritage", "inception",
 )
+_UNVERIFIED_FREE_TEXT = ("text", "description", "summary")
+
+# Tier 2 names made only of these words are too generic to count as "the user named this site"
+# (Wikidata has items literally labelled "Mosque", "Citadel", "Museum", ...).
+GENERIC_NAME_WORDS = {
+    "mosque", "church", "temple", "museum", "citadel", "castle", "fort", "fortress", "pyramid", "pyramids",
+    "tomb", "tombs", "palace", "gate", "bridge", "monastery", "house", "park", "garden", "garden",
+    "cemetery", "necropolis", "chapel", "school", "madrasa", "sabil", "minaret", "wall", "tower",
+    "lighthouse", "obelisk", "statue", "monument", "site", "ruins", "complex", "great", "old", "new",
+    "مسجد", "جامع", "كنيسه", "معبد", "متحف", "قلعه", "هرم", "مقبره", "قصر", "باب", "دير", "منزل", "بيت",
+}
 
 # Numeric operational facts: clock times and money amounts.
 OPERATIONAL_NUMBERS_RE = re.compile(
@@ -333,8 +346,28 @@ def sanitize_unverified_text(text: str) -> str:
 
 def _sanitize_unverified(chunk: RetrievedChunk) -> RetrievedChunk:
     payload = {k: chunk.payload.get(k) for k in UNVERIFIED_ALLOWED_FIELDS if k in chunk.payload}
-    payload["text"] = sanitize_unverified_text(payload.get("text") or "")
+    for k in _UNVERIFIED_FREE_TEXT:
+        if isinstance(payload.get(k), str):
+            payload[k] = sanitize_unverified_text(payload[k])
     return RetrievedChunk(score=chunk.score, payload=payload)
+
+
+@lru_cache(maxsize=1)
+def _city_words() -> frozenset:
+    """Every token of every city alias (EN+AR, normalized): 'Cairo', 'الأقصر', 'sharm', ..."""
+    from app.services.query_parsing import CITY_ALIASES
+
+    words = {w for aliases in CITY_ALIASES.values() for a in aliases for w in normalize(a).split()}
+    words |= {w[2:] for w in words if w.startswith("ال") and len(w) > 3}  # article-less Arabic forms
+    return frozenset(words)
+
+
+def _is_specific_name(name: Optional[str]) -> bool:
+    """False for names made only of generic words or city names ("Mosque", "Old Cairo", "Luxor"),
+    which must never count as the user naming a specific Tier 2 site."""
+    tokens = [t for t in normalize(name or "").split() if len(t) > 1]
+    ignorable = GENERIC_NAME_WORDS | _city_words() | {"of", "the", "al", "el"}
+    return bool(tokens) and not all(t in ignorable for t in tokens)
 
 
 def _site_key(c: RetrievedChunk) -> str:
@@ -377,7 +410,8 @@ def retrieve(query: str, language: Literal["en", "ar"], session: Session) -> Ret
 
     # 2. Named unverified site.
     named_t2 = [h for h in t2_hits if any(
-        name_tokens_in_query(h.payload.get(k) or "", query) for k in ("name_en", "name_ar"))]
+        _is_specific_name(h.payload.get(k)) and name_tokens_in_query(h.payload.get(k) or "", query)
+        for k in ("name_en", "name_ar"))]
     if named_t2:
         return _finish_unverified(result, named_t2, "unverified_name")
 

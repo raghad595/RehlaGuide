@@ -37,6 +37,10 @@ data/*.db-shm
 # Qdrant local vector store + chunk export -> python data/scripts/ingest_vectors.py
 data/qdrant_db/
 data/processed_chunks.json
+# Tier 2 (Wikidata): the snapshot egypt_wikidata_attractions.json/.csv IS committed
+# (offline source for ingest_wikidata.py); these two are regenerated.
+data/raw_wikidata/processed_wikidata_chunks.json
+data/raw_wikidata/wiki_summary_cache.json
 
 # ---------------------------------------------------------------- Model caches (if redirected into the repo)
 .cache/

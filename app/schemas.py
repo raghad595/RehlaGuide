@@ -123,6 +123,7 @@ class UnverifiedSource(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     source_url: Optional[str] = None
+    image_url: Optional[str] = None
     is_verified: Literal[False] = False
 
 class ChatResponse(BaseModel):

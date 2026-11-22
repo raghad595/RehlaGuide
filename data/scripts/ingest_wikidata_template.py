@@ -56,10 +56,20 @@ from typing import Any, Dict, Iterable, List
 from app.core.config import get_settings
 from app.services.vector_store import close_qdrant_client, embed_passages, get_qdrant_client
 
-COLLECTION = get_settings().unverified_collection  # "rehlaguide_wikidata_unverified"
+COLLECTION = get_settings().unverified_collection  # "rehlaguide_wikidata_unverified" (for display)
+
+
+def collection_name() -> str:
+    """Read at call time (not import time) so tests can point Tier 2 at a scratch collection."""
+    return get_settings().unverified_collection
+
 
 REQUIRED_FIELDS = ("chunk_id", "wikidata_qid", "language", "city", "category", "source_url", "text")
-OPTIONAL_FIELDS = ("name_en", "name_ar", "latitude", "longitude", "inception")
+OPTIONAL_FIELDS = (
+    "name_en", "name_ar", "latitude", "longitude", "inception", "attraction_id", "image_url",
+    # Language-specific structured facts (same language as `text`), used to render answers.
+    "description", "summary", "instance_of", "located_in", "architectural_styles", "heritage",
+)
 FORBIDDEN_KEY_PARTS = ("hour", "opening", "closing", "price", "ticket", "fee", "admission", "phone")
 FIXED_FIELDS = {"is_verified": False, "trust_tier": "unverified_historical_only"}
 
@@ -99,37 +109,58 @@ def chunk_text_for_embedding(p: Dict[str, Any]) -> str:
     return f"{header}\n\n{p['text']}"
 
 
-def index_wikidata_records(records: Iterable[Dict[str, Any]], recreate: bool = False,
-                           batch_size: int = 256) -> int:
-    """Validate, embed and upsert records into the Tier 2 collection. Returns the point count."""
-    from qdrant_client.models import Distance, PayloadSchemaType, PointStruct, VectorParams
+def ensure_collection(recreate: bool = False) -> None:
+    """Create the Tier 2 collection if missing (optionally wiping it first)."""
+    from qdrant_client.models import Distance, PayloadSchemaType, VectorParams
 
-    payloads: List[Dict[str, Any]] = [validate_record(r) for r in records]
+    name = collection_name()
+    client = get_qdrant_client()
+    if recreate and client.collection_exists(name):
+        client.delete_collection(name)
+    if not client.collection_exists(name):
+        dim = embed_passages(["dimension probe"]).shape[1]
+        client.create_collection(name, vectors_config=VectorParams(size=dim, distance=Distance.COSINE))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)  # local mode ignores payload indexes
+            for f in ("wikidata_qid", "language", "city", "category"):
+                client.create_payload_index(name, f, PayloadSchemaType.KEYWORD)
+
+
+def upsert_payloads(payloads: List[Dict[str, Any]], batch_size: int = 64, progress: bool = False) -> int:
+    """Embed payload['text'] (already final) and upsert. Point id = uuid5(chunk_id), so re-runs
+    overwrite instead of duplicating. Returns the collection's point count."""
+    from qdrant_client.models import PointStruct
+
+    name = collection_name()
+    client = get_qdrant_client()
+    for start in range(0, len(payloads), batch_size):
+        batch = payloads[start:start + batch_size]
+        vectors = embed_passages([p["text"] for p in batch])
+        client.upsert(name, points=[
+            PointStruct(id=str(uuid.uuid5(uuid.NAMESPACE_URL, p["chunk_id"])), vector=v.tolist(), payload=p)
+            for p, v in zip(batch, vectors)
+        ])
+        if progress:
+            print(f"  embedded {min(start + batch_size, len(payloads))}/{len(payloads)}", flush=True)
+    return client.count(name, exact=True).count
+
+
+def _check_unique(payloads: List[Dict[str, Any]]) -> None:
     ids = [p["chunk_id"] for p in payloads]
     dupes = {i for i in ids if ids.count(i) > 1}
     if dupes:
         raise RecordError(f"duplicate chunk_id(s): {sorted(dupes)[:10]}")
 
-    client = get_qdrant_client()
-    if recreate and client.collection_exists(COLLECTION):
-        client.delete_collection(COLLECTION)
-    if not client.collection_exists(COLLECTION):
-        dim = embed_passages(["dimension probe"]).shape[1]
-        client.create_collection(COLLECTION, vectors_config=VectorParams(size=dim, distance=Distance.COSINE))
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)  # local mode ignores payload indexes
-            for f in ("wikidata_qid", "language", "city", "category"):
-                client.create_payload_index(COLLECTION, f, PayloadSchemaType.KEYWORD)
 
-    for start in range(0, len(payloads), batch_size):
-        batch = payloads[start:start + batch_size]
-        vectors = embed_passages([chunk_text_for_embedding(p) for p in batch])
-        client.upsert(COLLECTION, points=[
-            PointStruct(id=str(uuid.uuid5(uuid.NAMESPACE_URL, p["chunk_id"])), vector=v.tolist(),
-                        payload={**p, "text": chunk_text_for_embedding(p)})
-            for p, v in zip(batch, vectors)
-        ])
-    return client.count(COLLECTION, exact=True).count
+def index_wikidata_records(records: Iterable[Dict[str, Any]], recreate: bool = False,
+                           batch_size: int = 64) -> int:
+    """Validate, add the context header, embed and upsert records. Returns the point count."""
+    payloads: List[Dict[str, Any]] = [validate_record(r) for r in records]
+    _check_unique(payloads)
+    for p in payloads:
+        p["text"] = chunk_text_for_embedding(p)
+    ensure_collection(recreate)
+    return upsert_payloads(payloads, batch_size)
 
 
 # --------------------------------------------------------------------------- SPARQL starting point
@@ -185,11 +216,11 @@ def main() -> int:
         return 0
     for r in DEMO_RECORDS:
         validate_record(r)
-    print(f"{len(DEMO_RECORDS)} demo records are valid for collection '{COLLECTION}'.")
+    print(f"{len(DEMO_RECORDS)} demo records are valid for collection '{collection_name()}'.")
     if args.write:
         try:
             n = index_wikidata_records(DEMO_RECORDS)
-            print(f"Indexed. '{COLLECTION}' now has {n} points.")
+            print(f"Indexed. '{collection_name()}' now has {n} points.")
         finally:
             close_qdrant_client()
     return 0

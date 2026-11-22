@@ -331,8 +331,23 @@ def _unverified_answer(result: RetrievalResult) -> str:
     for c in by_site.values():
         p = c.payload
         name = (p.get("name_ar") if lang == "ar" else p.get("name_en")) or p.get("name_en") or p.get("name_ar") or "?"
-        lines = [f"**{name}**", _excerpt(c, 600)]
-        loc = p.get("city") or ""
+        lines = [f"**{name}**"]
+        labels = (("instance_of", "Type", "النوع"), ("inception", "Built", "تاريخ الإنشاء"),
+                  ("architectural_styles", "Architectural style", "الطراز المعماري"),
+                  ("heritage", "Heritage status", "التصنيف التراثي"))
+        facts = [f"{en if lang == 'en' else ar}: {p[k]}" for k, en, ar in labels if p.get(k)]
+        if facts:
+            lines.append(" · ".join(facts))
+        parts = [x.strip() for x in (p.get("description"), p.get("summary")) if x and x.strip()]
+        parts = [x if x[-1] in ".!?؟" else x + "." for x in parts]  # Wikidata descriptions lack a period
+        prose = " ".join(parts)
+        if prose:
+            lines.append(prose[0].upper() + prose[1:] if lang == "en" else prose)
+        elif not facts:
+            lines.append(_excerpt(c, 600))
+        # `located_in` is already in the chunk's language (and includes the governorate);
+        # `city` is the English normalized label, so only fall back to it when nothing else exists.
+        loc = p.get("located_in") or p.get("city") or ""
         if p.get("latitude") is not None and p.get("longitude") is not None:
             loc = f"{loc} ({p['latitude']}, {p['longitude']})".strip()
         if loc:

@@ -175,14 +175,14 @@ MANUAL_ALIASES: Dict[str, Dict[str, List[str]]] = {
                             "المتحف المصري", "متحف التحرير"]},
     "CAI002": {"specific": ["nmec", "national museum of egyptian civilization", "civilization museum",
                             "museum of civilization", "متحف الحضارة", "المتحف القومي للحضارة"]},
-    "CAI003": {"specific": ["citadel of saladin", "saladin citadel", "saladin", "cairo citadel", "salah el din citadel",
+    "CAI003": {"specific": ["citadel of saladin", "saladin citadel", "cairo citadel", "salah el din citadel",
                             "mohammed ali mosque", "muhammad ali mosque", "alabaster mosque",
                             "قلعة صلاح الدين", "صلاح الدين", "مسجد محمد علي", "قلعة القاهرة"]},
     "ALX001": {"specific": ["bibliotheca alexandrina", "bibliotheca", "library of alexandria", "alexandria library",
                             "مكتبة الإسكندرية"]},
     "ALX002": {"specific": ["qaitbay", "qaitbey", "quaitbay", "kait bey", "قايتباي", "قلعة قايتباي"]},
-    "ALX003": {"specific": ["kom el shoqafa", "kom el shuqafa", "kom al shuqafa", "catacombs", "كوم الشقافة"]},
-    "ALX004": {"specific": ["pompeys pillar", "pompey pillar", "pompey", "serapeum", "عمود السواري", "السرابيوم"]},
+    "ALX003": {"specific": ["kom el shoqafa", "kom el shuqafa", "kom al shuqafa", "كوم الشقافة"]},
+    "ALX004": {"specific": ["pompeys pillar", "pompey pillar", "serapeum", "عمود السواري", "السرابيوم"]},
     "ALX005": {"specific": ["stanley bridge", "stanley", "كوبري ستانلي", "ستانلي"]},
     "SSN001": {"specific": ["saint catherine", "st catherine", "st. catherine", "mount sinai", "jabal musa",
                             "mount moses", "burning bush", "سانت كاترين", "جبل موسى", "دير سانت كاترين"]},
@@ -237,8 +237,8 @@ class AliasMatcher:
                 aliases.append(_Alias(aid, alias_pattern(a), True))
         self._aliases = aliases
 
-    def match(self, text: str) -> List[str]:
-        """Attraction ids named in text, in order of first mention."""
+    def match_spans(self, text: str) -> Tuple[str, List[Tuple[int, int, str]]]:
+        """(normalized text, accepted (start, end, attraction_id) spans in order of mention)."""
         norm = normalize(text)
         hits: List[Tuple[int, int, str, bool]] = []
         for al in self._aliases:
@@ -252,8 +252,11 @@ class AliasMatcher:
                 accepted.append(h)
         if any(not h[3] for h in accepted):
             accepted = [h for h in accepted if not h[3]]
-        ordered = sorted(accepted, key=lambda h: h[0])
-        return list(dict.fromkeys(h[2] for h in ordered))
+        return norm, [(s, e, aid) for s, e, aid, _ in sorted(accepted, key=lambda h: h[0])]
+
+    def match(self, text: str) -> List[str]:
+        """Attraction ids named in text, in order of first mention."""
+        return list(dict.fromkeys(aid for _, _, aid in self.match_spans(text)[1]))
 
 
 _STOP = {"the", "of", "and", "in", "on", "at", "el", "al", "a", "an", "de", "la"}
