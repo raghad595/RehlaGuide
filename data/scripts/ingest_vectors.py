@@ -17,16 +17,18 @@ from typing import Dict, List, Optional
 
 from sqlmodel import Session, select
 
+from app.core.config import get_settings
 from app.db.database import engine
 from app.models import Attraction
+from app.services.vector_store import close_qdrant_client, embed_passages, get_qdrant_client
 from rag.chunk_documents import parse_attraction_sections
 
 DATA_DIR = Path(__file__).resolve().parents[1]
 RAW_MD_DIR = DATA_DIR / "raw_md"
 CHUNKS_JSON = DATA_DIR / "processed_chunks.json"
-QDRANT_PATH = DATA_DIR / "qdrant_db"
-COLLECTION = "rehlaguide_attractions"
-EMBED_MODEL = "intfloat/multilingual-e5-small"
+QDRANT_PATH = get_settings().qdrant_path
+COLLECTION = get_settings().verified_collection
+EMBED_MODEL = get_settings().embed_model
 EXPECTED_CHUNKS_PER_LANG = 3
 
 # Canonical sub-section keys, with EN + AR aliases (normalized form).
@@ -163,19 +165,15 @@ def build_chunks(attractions: Dict[str, Attraction]) -> tuple[List[Chunk], List[
 
 
 def index_chunks(chunks: List[Chunk]) -> int:
-    from qdrant_client import QdrantClient
+    import warnings
+
     from qdrant_client.models import Distance, PayloadSchemaType, PointStruct, VectorParams
-    from sentence_transformers import SentenceTransformer
 
     print(f"Loading embedding model {EMBED_MODEL} ...")
-    model = SentenceTransformer(EMBED_MODEL, device="cpu")
-    # e5 models expect a "passage: " prefix for documents ("query: " for queries).
-    vectors = model.encode(
-        [f"passage: {c.text}" for c in chunks],
-        batch_size=16, normalize_embeddings=True, show_progress_bar=True,
-    )
+    # Shared helper adds the e5 "passage: " prefix, identical to the Wikidata tier.
+    vectors = embed_passages([c.text for c in chunks], show_progress=True)
 
-    client = QdrantClient(path=str(QDRANT_PATH))
+    client = get_qdrant_client()
     try:
         if client.collection_exists(COLLECTION):
             client.delete_collection(COLLECTION)
@@ -183,22 +181,25 @@ def index_chunks(chunks: List[Chunk]) -> int:
             COLLECTION,
             vectors_config=VectorParams(size=vectors.shape[1], distance=Distance.COSINE),
         )
-        for field in ("attraction_id", "language", "city", "chunk_type", "category"):
-            client.create_payload_index(COLLECTION, field, PayloadSchemaType.KEYWORD)
+        with warnings.catch_warnings():
+            # Local mode ignores payload indexes (warns); they apply on a Qdrant server.
+            warnings.simplefilter("ignore", UserWarning)
+            for field in ("attraction_id", "language", "city", "chunk_type", "category"):
+                client.create_payload_index(COLLECTION, field, PayloadSchemaType.KEYWORD)
         client.upsert(
             COLLECTION,
             points=[
                 PointStruct(
                     id=str(uuid.uuid5(uuid.NAMESPACE_URL, c.chunk_id)),
                     vector=vec.tolist(),
-                    payload=asdict(c),
+                    payload={**asdict(c), "is_verified": True, "trust_tier": "verified"},
                 )
                 for c, vec in zip(chunks, vectors)
             ],
         )
         return client.count(COLLECTION, exact=True).count
     finally:
-        client.close()
+        close_qdrant_client()
 
 
 def main() -> int:

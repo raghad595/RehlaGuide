@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 
@@ -74,3 +74,57 @@ class TicketPrice(SQLModel, table=True):
     last_verified_at: Optional[date] = None                   # From 'Last_Verified_At'
 
     attraction: Optional[Attraction] = Relationship(back_populates="ticket_prices")
+
+def _utcnow() -> datetime:
+    # Timezone-aware UTC. (datetime.utcnow() is deprecated, and this SQLModel version
+    # rejects naive datetimes on insert.)
+    return datetime.now(timezone.utc)
+
+
+class AnalyticsEvent(SQLModel, table=True):
+    __tablename__ = "analytics_events"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    timestamp: datetime = Field(default_factory=_utcnow, index=True)
+    session_id: str = Field(index=True)
+    event_type: str = Field(index=True)      # chat_qa | attraction_lookup | itinerary_plan | itinerary_replan
+    language: str = Field(index=True)        # en | ar
+    data_tier_used: str = Field(default="verified")  # verified | unverified_fallback | none
+    city: Optional[str] = Field(default=None, index=True)
+    attraction_ids_json: List[str] = Field(default=[], sa_column=Column(JSON))
+    cache_hit: bool = Field(default=False)
+    latency_ms: int = Field(default=0)
+
+
+class UnverifiedAttraction(SQLModel, table=True):
+    """Tier 2: Egyptian sites from Wikidata. Historical/cultural context ONLY.
+
+    Deliberately has NO opening-hours or ticket-price columns: Wikidata has no reliable
+    operational data, and the chat API must never present any for these sites.
+    """
+    __tablename__ = "unverified_attractions"
+
+    qid: str = Field(primary_key=True, index=True)
+    name_en: Optional[str] = Field(default=None, index=True)
+    name_ar: Optional[str] = Field(default=None, index=True)
+    description_en: Optional[str] = None
+    description_ar: Optional[str] = None
+    summary_en: Optional[str] = None          # Wikipedia lead extract, when fetched
+    summary_ar: Optional[str] = None
+    city_en: Optional[str] = Field(default=None, index=True)   # normalized governorate/city
+    city_ar: Optional[str] = Field(default=None, index=True)
+    category: str = Field(default="historical_monument", index=True)
+    architectural_styles_en: Optional[str] = None
+    architectural_styles_ar: Optional[str] = None
+    inception: Optional[str] = None
+    heritage_status: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    image_url: Optional[str] = None
+    source_url: str                            # https://www.wikidata.org/wiki/{qid}
+    wikipedia_en_url: Optional[str] = None
+    wikipedia_ar_url: Optional[str] = None
+    matches_verified_id: Optional[str] = Field(default=None, index=True)  # -> attractions.attraction_id
+    is_verified: bool = Field(default=False)
+    trust_tier: str = Field(default="unverified_historical_only")
+    fetched_at: datetime = Field(default_factory=_utcnow)
